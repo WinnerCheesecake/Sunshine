@@ -629,14 +629,60 @@ namespace platf {
   return 0;
 }
 
+/**
+ * @brief Resolve the Core Audio process object for a given PID.
+ * Translates a Unix PID to the AudioObjectID Core Audio uses to identify that process
+ * as a tap source, via kAudioHardwarePropertyTranslatePIDToProcessObject.
+ * @param pid The process ID to resolve.
+ * @return The process's AudioObjectID, or kAudioObjectUnknown if the PID has no audio process object.
+ */
+- (AudioObjectID)processObjectForPID:(pid_t)pid {
+  using namespace std::literals;
+
+  AudioObjectPropertyAddress addr = {
+    .mSelector = kAudioHardwarePropertyTranslatePIDToProcessObject,
+    .mScope = kAudioObjectPropertyScopeGlobal,
+    .mElement = kAudioObjectPropertyElementMain
+  };
+
+  AudioObjectID processObjectID = kAudioObjectUnknown;
+  UInt32 dataSize = sizeof(processObjectID);
+  OSStatus status = AudioObjectGetPropertyData(kAudioObjectSystemObject, &addr, sizeof(pid), &pid, &dataSize, &processObjectID);
+
+  if (status != noErr) {
+    BOOST_LOG(warning) << "Failed to translate PID "sv << pid << " to a Core Audio process object: "sv << ca::Status(status);
+    return kAudioObjectUnknown;
+  }
+
+  return processObjectID;
+}
+
 - (CATapDescription *)createSystemTapDescriptionForChannels:(UInt8)channels {
   using namespace std::literals;
 
   BOOST_LOG(debug) << "Creating tap description for "sv << (int) channels << " channels (using stereo tap)"sv;
-  NSArray *excludeProcesses = @[];
 
-  // Always use stereo tap - it handles mono by duplicating to left/right channels
-  CATapDescription *tapDescription = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:excludeProcesses];
+  // SUNSHINE_AUDIO_SOURCE_PID selects a single process to tap (set by HostApp from its
+  // per-app source picker) instead of mixing down the whole system. Falls back to the
+  // global tap, as before, when unset or when the PID can't be resolved to a Core Audio
+  // process object (e.g. the app has already quit).
+  CATapDescription *tapDescription = nil;
+  if (const char *sourcePidEnv = std::getenv("SUNSHINE_AUDIO_SOURCE_PID")) {
+    pid_t sourcePid = (pid_t) atoi(sourcePidEnv);
+    AudioObjectID processObjectID = sourcePid > 0 ? [self processObjectForPID:sourcePid] : kAudioObjectUnknown;
+
+    if (processObjectID != kAudioObjectUnknown) {
+      BOOST_LOG(info) << "Tapping single process (PID "sv << sourcePid << ", process object "sv << processObjectID << ") instead of the whole system"sv;
+      tapDescription = [[CATapDescription alloc] initStereoMixdownOfProcesses:@[@(processObjectID)]];
+    } else {
+      BOOST_LOG(warning) << "SUNSHINE_AUDIO_SOURCE_PID="sv << sourcePidEnv << " could not be resolved to an audio process; falling back to the global tap"sv;
+    }
+  }
+
+  if (!tapDescription) {
+    // Always use stereo tap - it handles mono by duplicating to left/right channels
+    tapDescription = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
+  }
 
   // Set unique name and UUID for this instance
   NSString *uniqueName = [NSString stringWithFormat:@"SunshineAVAudio-Tap-%p", (void *) self];

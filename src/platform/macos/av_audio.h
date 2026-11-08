@@ -195,10 +195,20 @@ typedef struct {
 
 /**
  * @brief Creates a Core Audio tap description for system audio capture.
+ *
+ * Taps a single process when the SUNSHINE_AUDIO_SOURCE_PID environment variable names
+ * one, otherwise taps the whole system mix.
  * @param channels Number of audio channels to configure the tap for
  * @return CATapDescription object on success, nil on failure
  */
 - (nullable CATapDescription *)createSystemTapDescriptionForChannels:(UInt8)channels;
+
+/**
+ * @brief Resolve the Core Audio process object for a given PID.
+ * @param pid The process ID to resolve.
+ * @return The process's AudioObjectID, or kAudioObjectUnknown if the PID has no audio process object.
+ */
+- (AudioObjectID)processObjectForPID:(pid_t)pid;
 
 /**
  * @brief Creates an aggregate device with the specified tap description and audio parameters.
