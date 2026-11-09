@@ -477,10 +477,10 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  // Ableton Together: Guests always connect through HostApp's direct token-gated link, never
+  // by browsing for a host on the LAN — Bonjour/mDNS advertisement is pure overhead (an
+  // always-on background thread plus startup noise) with nothing that ever uses it.
   std::unique_ptr<platf::deinit_t> mDNS;
-  auto sync_mDNS = std::async(std::launch::async, [&mDNS]() {
-    mDNS = platf::publish::start();
-  });
 
   std::unique_ptr<platf::deinit_t> upnp_unmap;
   auto sync_upnp = std::async(std::launch::async, [&upnp_unmap]() {
