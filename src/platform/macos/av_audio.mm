@@ -657,6 +657,34 @@ namespace platf {
   return processObjectID;
 }
 
+/**
+ * @brief Resolve Core Audio process objects for a comma-separated list of PIDs.
+ * Used for SUNSHINE_AUDIO_EXCLUDE_PIDS: silently skips any PID that can't be resolved
+ * (e.g. the process already quit) instead of failing the whole exclude list.
+ * @param pidsCsv Comma-separated PIDs, e.g. "123,456".
+ * @return Array of NSNumber-wrapped AudioObjectIDs that resolved successfully.
+ */
+- (NSArray<NSNumber *> *)processObjectsForPIDsCSV:(NSString *)pidsCsv {
+  using namespace std::literals;
+
+  NSMutableArray<NSNumber *> *processObjects = [NSMutableArray array];
+  for (NSString *pidString in [pidsCsv componentsSeparatedByString:@","]) {
+    pid_t pid = (pid_t) [pidString intValue];
+    if (pid <= 0) {
+      continue;
+    }
+
+    AudioObjectID processObjectID = [self processObjectForPID:pid];
+    if (processObjectID != kAudioObjectUnknown) {
+      [processObjects addObject:@(processObjectID)];
+    } else {
+      BOOST_LOG(warning) << "Could not resolve excluded PID "sv << pid << " to an audio process; ignoring"sv;
+    }
+  }
+
+  return processObjects;
+}
+
 - (CATapDescription *)createSystemTapDescriptionForChannels:(UInt8)channels {
   using namespace std::literals;
 
@@ -680,8 +708,19 @@ namespace platf {
   }
 
   if (!tapDescription) {
+    // SUNSHINE_AUDIO_EXCLUDE_PIDS (comma-separated PIDs, set by HostApp from its
+    // exclude-list picker) taps the whole system except the listed processes — e.g.
+    // excluding a voice-chat app so the Guest doesn't hear their own voice echoed back
+    // through the Host's system audio. Unset/empty behaves exactly like the original
+    // plain global tap.
+    NSArray<NSNumber *> *excludedProcessObjects = @[];
+    if (const char *excludePidsEnv = std::getenv("SUNSHINE_AUDIO_EXCLUDE_PIDS")) {
+      excludedProcessObjects = [self processObjectsForPIDsCSV:[NSString stringWithUTF8String:excludePidsEnv]];
+      BOOST_LOG(info) << "Tapping whole system audio, excluding "sv << excludedProcessObjects.count << " process(es)"sv;
+    }
+
     // Always use stereo tap - it handles mono by duplicating to left/right channels
-    tapDescription = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
+    tapDescription = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:excludedProcessObjects];
   }
 
   // Set unique name and UUID for this instance
