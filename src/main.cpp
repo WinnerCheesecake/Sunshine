@@ -482,10 +482,10 @@ int main(int argc, char *argv[]) {
   // always-on background thread plus startup noise) with nothing that ever uses it.
   std::unique_ptr<platf::deinit_t> mDNS;
 
+  // Nothing ever connects to Sunshine's own ports (47984/47989/47990/48010) from outside
+  // this Mac — web-server is the only client, over localhost — so there's nothing for UPnP
+  // to usefully port-forward on the router either.
   std::unique_ptr<platf::deinit_t> upnp_unmap;
-  auto sync_upnp = std::async(std::launch::async, [&upnp_unmap]() {
-    upnp_unmap = upnp::start();
-  });
 
   // FIXME: Temporary workaround: Simple-Web_server needs to be updated or replaced
   if (shutdown_event->peek()) {
