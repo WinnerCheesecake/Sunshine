@@ -477,7 +477,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // Ableton Together: Guests always connect through HostApp's direct token-gated link, never
+  // dawswithfriends: Guests always connect through HostApp's direct token-gated link, never
   // by browsing for a host on the LAN — Bonjour/mDNS advertisement is pure overhead (an
   // always-on background thread plus startup noise) with nothing that ever uses it.
   std::unique_ptr<platf::deinit_t> mDNS;
